@@ -24,9 +24,15 @@
  |  Author: Mihai Baneu                           Last modified: 20.Mai.2021  |
  |                                                                            |
  |___________________________________________________________________________*/
- 
+
 #pragma once
 
-void adc_init();
-void adc_enable();
-void adc_disable();
+typedef struct dma_event_t {
+    uint16_t *buffer;
+    uint16_t length;
+} dma_event_t;
+
+void dma_init();
+void dma_enable();
+void dma_disable();
+void dma_isr_handler();

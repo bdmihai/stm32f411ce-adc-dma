@@ -12,7 +12,8 @@
         "string_view": "c",
         "ranges": "c",
         "stm32f4xx.h": "c",
-        "cstdint": "cpp"
+        "cstdint": "cpp",
+        "adc.h": "c"
     },
     "Open files list": false,
     "Toggle terminal": false,

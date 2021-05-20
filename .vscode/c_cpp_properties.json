@@ -10,9 +10,9 @@
 		"./source/uprintf/**",
                 "./source/st7066u/**",
                 "./source/freertos/**",
-                "/usr/lib/gcc/arm-none-eabi/10.2.0/include/**",
-                "/usr/lib/gcc/arm-none-eabi/10.2.0/include-fixed/**",
-                "/usr/lib/gcc/arm-none-eabi/10.2.0/../../../../arm-none-eabi/include/**"
+                "/usr/lib/gcc/arm-none-eabi/10.3.0/include/**",
+                "/usr/lib/gcc/arm-none-eabi/10.3.0/include-fixed/**",
+                "/usr/lib/gcc/arm-none-eabi/10.3.0/../../../../arm-none-eabi/include/**"
             ],
             "forcedInclude": [],
             "compilerPath": "/usr/bin/arm-none-eabi-g++",

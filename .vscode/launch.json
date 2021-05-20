@@ -57,6 +57,16 @@
             ],
             "overrideLaunchCommands": [
             ]
+        },
+        {
+            "cwd": "${workspaceRoot}",
+            "executable": "${workspaceFolder}/bin/application.elf",
+            "name": "STLink",
+            "request": "launch",
+            "device": "STM32F411xx",
+            "type": "cortex-debug",
+            "servertype": "stutil",
+            "svdFile": "${workspaceFolder}/doc/stm32/svd/STM32F411.svd",
         }
     ]
 }

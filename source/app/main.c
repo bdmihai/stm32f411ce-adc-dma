@@ -21,7 +21,7 @@
  | THE USE OR OTHER DEALINGS IN THE SOFTWARE.                                 |
  |____________________________________________________________________________|
  |                                                                            |
- |  Author: Mihai Baneu                           Last modified: 21.Jan.2021  |
+ |  Author: Mihai Baneu                           Last modified: 20.Mai.2021  |
  |                                                                            |
  |___________________________________________________________________________*/
 
@@ -32,12 +32,24 @@
 #include "system.h"
 #include "gpio.h"
 #include "adc.h"
+#include "dma.h"
 #include "isr.h"
 #include "st7066u.h"
 #include "printf.h"
 
-/* Queue used to send and receive complete message structures. */
-QueueHandle_t adc_queue = NULL;
+/* lcd update event */
+typedef struct lcd_event_t {
+    float voltage;
+    uint32_t digital_value;
+} lcd_event_t;
+
+/* Queue used to communicate dma messages. */
+QueueHandle_t dma_queue = NULL;
+
+/* Queue used to communicate LCD update messages. */
+QueueHandle_t lcd_queue = NULL;
+
+static volatile uint32_t mss_counter = 0;
 
 static void vTaskLED(void *pvParameters)
 {
@@ -63,8 +75,10 @@ static void vTaskLED(void *pvParameters)
 
 static void vTaskDisplay(void *pvParameters)
 {
-    adc_event_t event;
     (void)pvParameters;
+
+    TickType_t xLastWakeTime = xTaskGetTickCount();
+    char txt[17] = {0};
 
     st7066u_hw_control_t hw = {
         .config_control_out  = gpio_config_control_out,
@@ -94,28 +108,45 @@ static void vTaskDisplay(void *pvParameters)
     vTaskDelay(2000 / portTICK_PERIOD_MS);
 
     for (;;) {
-        if (xQueueReceive(adc_queue, &event, portMAX_DELAY) == pdPASS) {
-            char txt[17] = {0};
-            float voltage = event.digital_value * 3.312f / (4096.0f * 250);
-            
+        vTaskDelayUntil(&xLastWakeTime, 250 / portTICK_PERIOD_MS);
+
+        lcd_event_t lcd_event;
+        if (xQueueReceive(lcd_queue, &lcd_event, portMAX_DELAY) == pdPASS) {
             st7066u_cmd_clear_display();
-            sprintf(txt, "    %4.4f V    ", voltage);
+            sprintf(txt, "    %4.4f V    ", lcd_event.voltage);
             st7066u_write_str(txt);
             st7066u_cmd_set_ddram(0x40);
-            sprintf(txt, "   %5d dig   ", event.digital_value);
+            sprintf(txt, "%6d:%8d", mss_counter, lcd_event.digital_value);
             st7066u_write_str(txt);
         }
     }
 }
 
-static void vTaskAdc(void *pvParameters)
+static void vTaskDma(void *pvParameters)
 {
     (void)pvParameters;
-    TickType_t xLastWakeTime = xTaskGetTickCount();
-    
+
+    dma_enable();
+    adc_enable();
+
     for (;;) {
-        vTaskDelayUntil(&xLastWakeTime, 250 / portTICK_PERIOD_MS);
-        adc_start_conversion();
+        dma_event_t dma_event;
+        if (xQueueReceive(dma_queue, &dma_event, portMAX_DELAY) == pdPASS) {
+            lcd_event_t lcd_event;
+
+            // cumulate all values measured by the ADC in order to get the average
+            lcd_event.digital_value = 0;
+            for (uint16_t i = 0; i < dma_event.length; i++) {
+                lcd_event.digital_value += dma_event.buffer[i];
+            }
+
+            // calculate the voltage
+            lcd_event.voltage = (lcd_event.digital_value * 3.312f) / (4096.0f * dma_event.length);
+            mss_counter++;
+
+            // send the measurement to the display task
+            xQueueSendToBack(lcd_queue, &lcd_event, (TickType_t) 0);
+        }
     }
 }
 
@@ -127,19 +158,23 @@ int main(void)
     /* initialize the gpio */
     gpio_init();
 
-    /* initialize the adc */
-    adc_init();
-
     /* initialize the interupt service routines */
     isr_init();
 
+    /* initialize the dma */
+    dma_init();
+
+    /* initialize the adc */
+    adc_init();
+
     /* create the queues */
-    adc_queue = xQueueCreate(1, sizeof(adc_event_t));
+    dma_queue = xQueueCreate(1, sizeof(dma_event_t));
+    lcd_queue = xQueueCreate(1, sizeof(lcd_event_t));
 
     /* create the tasks specific to this application. */
     xTaskCreate(vTaskLED, "vTaskLED", configMINIMAL_STACK_SIZE, NULL, 3, NULL);
     xTaskCreate(vTaskDisplay, "vTaskDisplay", configMINIMAL_STACK_SIZE*2, NULL, 2, NULL);
-    xTaskCreate(vTaskAdc, "vTaskAdc", configMINIMAL_STACK_SIZE, NULL, 2, NULL);
+    xTaskCreate(vTaskDma, "vTaskDma", configMINIMAL_STACK_SIZE, NULL, 2, NULL);
 
     /* start the scheduler. */
     vTaskStartScheduler();

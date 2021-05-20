@@ -21,22 +21,23 @@
  | THE USE OR OTHER DEALINGS IN THE SOFTWARE.                                 |
  |____________________________________________________________________________|
  |                                                                            |
- |  Author: Mihai Baneu                           Last modified: 15.May.2020  |
+ |  Author: Mihai Baneu                           Last modified: 20.Mai.2021  |
  |                                                                            |
  |___________________________________________________________________________*/
 
 #include "stm32f4xx.h"
 #include "isr.h"
+#include "dma.h"
 #include "adc.h"
 
 void isr_init()
 {
     /* enable interupt */
-    NVIC_SetPriority(ADC_IRQn, NVIC_EncodePriority(NVIC_GetPriorityGrouping(), 11 /* PreemptPriority */, 0 /* SubPriority */));
-    NVIC_EnableIRQ(ADC_IRQn);
+    NVIC_SetPriority(DMA2_Stream0_IRQn, NVIC_EncodePriority(NVIC_GetPriorityGrouping(), 11 /* PreemptPriority */, 0 /* SubPriority */));
+    NVIC_EnableIRQ(DMA2_Stream0_IRQn);
 }
 
-void ADC_IRQHandler(void)
+void DMA2_Stream0_IRQHandler(void)
 {
-  adc_handle_conversion();
+  dma_isr_handler();
 }
