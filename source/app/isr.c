@@ -26,6 +26,8 @@
  |___________________________________________________________________________*/
 
 #include "stm32f4xx.h"
+#include "stm32rtos.h"
+#include "queue.h"
 #include "isr.h"
 #include "dma.h"
 #include "adc.h"

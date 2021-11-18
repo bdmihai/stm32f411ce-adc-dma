@@ -28,12 +28,22 @@
 #include "stm32f4xx.h"
 #include "stm32rtos.h"
 #include "queue.h"
+#include "lcd.h"
 #include "dma.h"
 
-extern QueueHandle_t dma_queue;
 
-static uint16_t dma_buffer0[1000];
-static uint16_t dma_buffer1[1000];
+/* adc samples count to take for averaging */
+#define ADC_SAMPLES_COUNT  1000
+
+/* Queue used to communicate dma messages. */
+QueueHandle_t dma_queue = NULL;
+
+/* message counter */
+static volatile uint32_t mss_counter = 0;
+
+/* the memmory buffers for the DMA */
+static uint16_t dma_buffer0[ADC_SAMPLES_COUNT];
+static uint16_t dma_buffer1[ADC_SAMPLES_COUNT];
 
 void dma_init()
 {
@@ -49,7 +59,7 @@ void dma_init()
     DMA2_Stream0->PAR  = (uint32_t)&(ADC1->DR);
     DMA2_Stream0->M0AR = (uint32_t)dma_buffer0;
     DMA2_Stream0->M1AR = (uint32_t)dma_buffer1;
-    DMA2_Stream0->NDTR = 1000;
+    DMA2_Stream0->NDTR = ADC_SAMPLES_COUNT;
 
     /* select the channel 0 for the stram 0 - ADC1*/
     MODIFY_REG(DMA2_Stream0->CR, DMA_SxCR_CHSEL_Msk, 0);
@@ -73,8 +83,8 @@ void dma_init()
 
 void dma_enable()
 {
-    memset(dma_buffer0, 0, 1000);
-    memset(dma_buffer1, 0, 1000);
+    memset(dma_buffer0, 0, ADC_SAMPLES_COUNT);
+    memset(dma_buffer1, 0, ADC_SAMPLES_COUNT);
     MODIFY_REG(DMA2_Stream0->CR, DMA_SxCR_EN_Msk, DMA_SxCR_EN);
 }
 
@@ -88,7 +98,7 @@ void dma_isr_handler()
     if (DMA2->LISR & DMA_LISR_TCIF0_Msk) {
         dma_event_t dma_event;
 
-        dma_event.length = 1000;
+        dma_event.length = ADC_SAMPLES_COUNT;
         if (DMA2_Stream0->CR & DMA_SxCR_CT_Msk) {
             dma_event.buffer = dma_buffer0;
         } else {
@@ -98,5 +108,34 @@ void dma_isr_handler()
         /* clear the interupt register */
         SET_BIT(DMA2->LIFCR, DMA_LIFCR_CFEIF0_Msk | DMA_LIFCR_CDMEIF0_Msk | DMA_LIFCR_CTEIF0_Msk | DMA_LIFCR_CHTIF0_Msk | DMA_LIFCR_CTCIF0_Msk);
         xQueueSendFromISR(dma_queue, &dma_event, (TickType_t) 0);
+    }
+}
+
+void vTaskDma(void *pvParameters)
+{
+    (void)pvParameters;
+
+    dma_enable();
+    adc_enable();
+
+    for (;;) {
+        dma_event_t dma_event;
+        if (xQueueReceive(dma_queue, &dma_event, portMAX_DELAY) == pdPASS) {
+            lcd_event_t lcd_event;
+
+            // cumulate all values measured by the ADC in order to get the average
+            lcd_event.digital_value = 0;
+            for (uint16_t i = 0; i < dma_event.length; i++) {
+                lcd_event.digital_value += dma_event.buffer[i];
+            }
+
+            // calculate the voltage
+            lcd_event.voltage = (lcd_event.digital_value * 3.312f) / (4096.0f * dma_event.length);
+            lcd_event.mss_counter = mss_counter;
+            mss_counter++;
+
+            // send the measurement to the display task
+            xQueueSendToBack(lcd_queue, &lcd_event, (TickType_t) 0);
+        }
     }
 }

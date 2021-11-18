@@ -32,7 +32,10 @@ typedef struct dma_event_t {
     uint16_t length;
 } dma_event_t;
 
+extern QueueHandle_t dma_queue;
+
 void dma_init();
 void dma_enable();
 void dma_disable();
 void dma_isr_handler();
+void vTaskDma(void *pvParameters);

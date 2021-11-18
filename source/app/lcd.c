@@ -27,70 +27,65 @@
 
 #include "stm32f4xx.h"
 #include "stm32rtos.h"
-#include "task.h"
 #include "queue.h"
-#include "system.h"
+#include "st7066u.h"
+#include "printf.h"
 #include "gpio.h"
-#include "adc.h"
-#include "dma.h"
-#include "isr.h"
+#include "system.h"
 #include "lcd.h"
 
-static void vTaskLED(void *pvParameters)
+ /* Queue used to communicate LCD update messages. */
+QueueHandle_t lcd_queue = NULL;
+
+void vTaskDisplay(void *pvParameters)
 {
     (void)pvParameters;
 
-    /* led OFF */
-    gpio_set_blue_led();
+    TickType_t xLastWakeTime = xTaskGetTickCount();
+    char txt[17] = {0};
+
+    st7066u_hw_control_t hw = {
+        .config_control_out  = gpio_config_control_out,
+        .config_data_out     = gpio_config_data_out,
+        .config_data_in      = gpio_config_data_in,
+        .e_high              = gpio_e_high,
+        .e_low               = gpio_e_low,
+        .rs_high             = gpio_rs_high,
+        .rs_low              = gpio_rs_low,
+        .data_wr             = gpio_data_wr,
+        .data_rd             = gpio_data_rd,
+        .delay_us            = delay_us
+    };
+
+    st7066u_init(hw);
+
+    st7066u_cmd_function_set(ST7066U_8_BITS_DATA, ST7066U_2_LINE_DISPLAY, ST7066U_5x8_SIZE);
+    st7066u_cmd_on_off(ST7066U_DISPLAY_ON, ST7066U_CURSOR_OFF, ST7066U_CURSOR_POSITION_OFF);
+    st7066u_cmd_clear_display();
+    st7066u_cmd_entry_mode(ST7066U_INCREMENT_ADDRESS, ST7066U_SHIFT_DISABLED);
+
+    st7066u_write_str("    Welcome!    ");
+    st7066u_cmd_set_ddram(0x40);
+    st7066u_write_str("ADC meas on PB0");
+    vTaskDelay(2000 / portTICK_PERIOD_MS);
 
     for (;;) {
-        gpio_reset_blue_led();
-        vTaskDelay(1000 / portTICK_PERIOD_MS);
+        vTaskDelayUntil(&xLastWakeTime, 250 / portTICK_PERIOD_MS);
 
-        gpio_set_blue_led();
-        vTaskDelay(100 / portTICK_PERIOD_MS);
-
-        gpio_reset_blue_led();
-        vTaskDelay(100 / portTICK_PERIOD_MS);
-
-        gpio_set_blue_led();
-        vTaskDelay(100 / portTICK_PERIOD_MS);
+        lcd_event_t lcd_event;
+        if (xQueueReceive(lcd_queue, &lcd_event, portMAX_DELAY) == pdPASS) {
+            st7066u_cmd_clear_display();
+            sprintf(txt, "    %4.4f V    ", lcd_event.voltage);
+            st7066u_write_str(txt);
+            st7066u_cmd_set_ddram(0x40);
+            sprintf(txt, "%6d:%8d", lcd_event.mss_counter, lcd_event.digital_value);
+            st7066u_write_str(txt);
+        }
     }
 }
 
-int main(void)
+
+void lcd_init()
 {
-    /* initialize the system */
-    system_init();
-
-    /* initialize the gpio */
-    gpio_init();
-
-    /* initialize the interupt service routines */
-    isr_init();
-
-    /* initialize the dma */
-    dma_init();
-
-    /* initialize the adc */
-    adc_init();
-
-    /* initialize the display */
-    lcd_init();
-
-    /* create the queues */
-    dma_queue = xQueueCreate(1, sizeof(dma_event_t));
-    lcd_queue = xQueueCreate(1, sizeof(lcd_event_t));
-
-    /* create the tasks specific to this application. */
-    xTaskCreate(vTaskLED, "vTaskLED", configMINIMAL_STACK_SIZE, NULL, 3, NULL);
-    xTaskCreate(vTaskDisplay, "vTaskDisplay", configMINIMAL_STACK_SIZE*2, NULL, 2, NULL);
-    xTaskCreate(vTaskDma, "vTaskDma", configMINIMAL_STACK_SIZE, NULL, 2, NULL);
-
-    /* start the scheduler. */
-    vTaskStartScheduler();
-
-    /* should never get here ... */
-    blink(10);
-    return 0;
+    
 }

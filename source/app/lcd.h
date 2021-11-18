@@ -25,72 +25,17 @@
  |                                                                            |
  |___________________________________________________________________________*/
 
-#include "stm32f4xx.h"
-#include "stm32rtos.h"
-#include "task.h"
-#include "queue.h"
-#include "system.h"
-#include "gpio.h"
-#include "adc.h"
-#include "dma.h"
-#include "isr.h"
-#include "lcd.h"
+#pragma once
 
-static void vTaskLED(void *pvParameters)
-{
-    (void)pvParameters;
+/* lcd update event */
+typedef struct lcd_event_t {
+    float voltage;
+    uint32_t digital_value;
+    uint32_t mss_counter;
+} lcd_event_t;
 
-    /* led OFF */
-    gpio_set_blue_led();
+/* Queue used to communicate LCD update messages. */
+extern QueueHandle_t lcd_queue;
 
-    for (;;) {
-        gpio_reset_blue_led();
-        vTaskDelay(1000 / portTICK_PERIOD_MS);
-
-        gpio_set_blue_led();
-        vTaskDelay(100 / portTICK_PERIOD_MS);
-
-        gpio_reset_blue_led();
-        vTaskDelay(100 / portTICK_PERIOD_MS);
-
-        gpio_set_blue_led();
-        vTaskDelay(100 / portTICK_PERIOD_MS);
-    }
-}
-
-int main(void)
-{
-    /* initialize the system */
-    system_init();
-
-    /* initialize the gpio */
-    gpio_init();
-
-    /* initialize the interupt service routines */
-    isr_init();
-
-    /* initialize the dma */
-    dma_init();
-
-    /* initialize the adc */
-    adc_init();
-
-    /* initialize the display */
-    lcd_init();
-
-    /* create the queues */
-    dma_queue = xQueueCreate(1, sizeof(dma_event_t));
-    lcd_queue = xQueueCreate(1, sizeof(lcd_event_t));
-
-    /* create the tasks specific to this application. */
-    xTaskCreate(vTaskLED, "vTaskLED", configMINIMAL_STACK_SIZE, NULL, 3, NULL);
-    xTaskCreate(vTaskDisplay, "vTaskDisplay", configMINIMAL_STACK_SIZE*2, NULL, 2, NULL);
-    xTaskCreate(vTaskDma, "vTaskDma", configMINIMAL_STACK_SIZE, NULL, 2, NULL);
-
-    /* start the scheduler. */
-    vTaskStartScheduler();
-
-    /* should never get here ... */
-    blink(10);
-    return 0;
-}
+void lcd_init();
+void vTaskDisplay(void *pvParameters);

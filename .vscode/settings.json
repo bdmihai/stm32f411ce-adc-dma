@@ -13,7 +13,9 @@
         "ranges": "c",
         "stm32f4xx.h": "c",
         "cstdint": "cpp",
-        "adc.h": "c"
+        "adc.h": "c",
+        "dma.h": "c",
+        "queue.h": "c"
     },
     "Open files list": false,
     "Toggle terminal": false,
